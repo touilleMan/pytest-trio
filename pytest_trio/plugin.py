@@ -29,9 +29,17 @@ def _trio_test_runner_factory(item):
     @trio_test
     async def _bootstrap_fixture_and_run_test(**kwargs):
         __tracebackhide__ = True
-        resolved_kwargs = await _setup_async_fixtures_in(kwargs)
-        await testfunc(**resolved_kwargs)
-        await _teardown_async_fixtures_in(kwargs)
+
+        async def _runner(nursery):
+            __tracebackhide__ = True
+            resolved_kwargs = await _setup_async_fixtures_in(kwargs)
+            await testfunc(**resolved_kwargs)
+            await _teardown_async_fixtures_in(kwargs)
+            # nursery.cancel_scope.cancel()
+
+        async with trio.open_nursery() as nursery:
+            item._trio_nursery = nursery
+            nursery.start_soon(_runner, nursery)
 
     return _bootstrap_fixture_and_run_test
 
@@ -215,3 +223,8 @@ def mock_clock():
 @pytest.fixture
 def autojump_clock():
     return MockClock(autojump_threshold=0)
+
+
+@pytest.fixture
+async def nursery(request):
+    return request.node._trio_nursery
